@@ -127,6 +127,86 @@ Options:
   n - Cancel
 ```
 
+### Advanced Usage
+
+#### Generate a commit message for an existing commit
+1. **Find and store a commit hash**:
+   ```bash
+   git log
+   ```
+   or search your logs by keyword
+   ```bash
+   git log --grep=<keyword>
+   ```
+   select the commit and copy the hash
+   ```bash
+   git log --grep=update
+   commit f01279fa49a06f049dae4b379907a7d3723c1700
+   Author: User <user_email@gmail.com>
+   Date:   Fri Mar 13 19:52:38 2026 -0400
+      update
+   ```
+   the hash in this example is `f01279fa49a06f049dae4b379907a7d3723c1700`
+
+2. **Generate commit message**:
+   ```bash
+   ai-commit -c f01279fa49a06f049dae4b379907a7d3723c1700
+   ```
+
+3. **Review and choose**:
+   - `y` - Accept and commit
+   - `r` - Regenerate message
+   - `e` - Edit message manually
+   - `n` - Cancel
+
+#### Generate a commit message for the diff of two commits
+1. **Find and store a commit hash**:
+   ```bash
+   git log
+   ```
+   or search your logs by keyword
+   ```bash
+   git log --grep=<keyword>
+   ```
+   select the commit and copy the hash
+   ```bash
+   git log --grep=update
+   commit f01279fa49a06f049dae4b379907a7d3723c1700
+   Author: User <user_email@gmail.com>
+   Date:   Fri Mar 13 19:52:38 2026 -0400
+      update
+   ```
+   the hash in this example is `f01279fa49a06f049dae4b379907a7d3723c1700`
+
+2. **Find and store a second commit hash**
+   ```bash
+   git log
+   ```
+   or search your logs by keyword
+   ```bash
+   git log --grep=<keyword>
+   ```
+   select the commit and copy the hash
+   ```bash
+   git log --grep=update
+   commit 575e541f630d3b9a53d6110519e7e4330b1a7281
+   Author: User <user_email@gmail.com>
+   Date:   Tue Mar 3 14:31:25 2026 -0500
+      update
+   ```
+   the hash in this example is `575e541f630d3b9a53d6110519e7e4330b1a7281`
+
+3.**Generate commit message**:
+   The order of commit args here does not change the result
+   ```bash
+   ai-commit -r 575e541f630d3b9a53d6110519e7e4330b1a7281 f01279fa49a06f049dae4b379907a7d3723c1700
+   ```
+
+5. **Review and choose**:
+   - `y` - Accept and commit
+   - `r` - Regenerate message
+   - `e` - Edit message manually
+   - `n` - Cancel
 ---
 
 ## ⚙️ Configuration
@@ -166,6 +246,14 @@ The tool supports three commit message styles:
    - Implement JWT-based authentication
    - Add login and logout endpoints
    - Create user session management
+
+   New Files
+   - Authenticate.cs
+
+   AlteredFiles
+   - SessionManager.cs
+   -- LogIn()
+   -- LogOut()
    ```
 
 ---
@@ -203,6 +291,7 @@ $ ai-commit
 ║      Powered by Local Ollama 🦙           ║
 ╚═══════════════════════════════════════════╝
 
+summarize staged changes
 🔍 Checking Ollama server...
 ✓ Ollama server is running
 
@@ -218,7 +307,47 @@ Available models (3):
   + 8 lines added
   - 0 lines removed
 
-🤖 Generating commit message...
+🤖 Generating conventional commit message...
+```
+
+## 🤖 Manual Model Selection
+
+A specific model may be selected by adding `-m <model name>` or `--model <model name>` after `ai-commit`
+
+### How It Works:
+
+When you run `ai-commit -m <model name>`, the tool will:
+1. Check all installed Ollama models
+2. Ensure that the specified model is available
+3. Auto select if the specified model is not available
+4. Generate your commit message
+
+### Example Output:
+
+```bash
+$ ai-commit -m mistral
+
+╔═══════════════════════════════════════════╗
+║         🤖 AI Commit Message Tool         ║
+║      Powered by Local Ollama 🦙           ║
+╚═══════════════════════════════════════════╝
+
+summarize staged changes
+🔍 Checking Ollama server...
+✓ Ollama server is running
+
+Available models (3):
+  • phi:latest
+  • mistral:latest
+  • llama2:latest
+
+✓ Selected: mistral
+
+📊 Changes:
+  + 8 lines added
+  - 0 lines removed
+
+🤖 Generating conventional commit message...
 ```
 
 ### Recommended Setup:
