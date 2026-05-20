@@ -326,7 +326,6 @@ def main():
     print_banner()
 
     parser = argparse.ArgumentParser()    
-    parser.add_argument("-s", "--staged", help="summarize staged changes", action="store_true", required=False)
     parser.add_argument("-c", "--commit", help="summarize specific commit", nargs=1, required=False)
     parser.add_argument("-r", "--range", help="summarize a range of commits", nargs=2, required=False)
     parser.add_argument("-m", "--model", help="select a model", nargs=1, required=False)
@@ -392,7 +391,7 @@ def main():
             else:
                 print(f"{Colors.RED}❌ Error: codellama model not detected. Defaulting to auto-select{Colors.YELLOW, Colors.END}")
                 shouldAutoSelect = True
-    elif args.staged:
+    else:
         print("summarize staged changes")
         # Check for staged changes
         if not GitService.has_staged_changes():
@@ -402,9 +401,6 @@ def main():
             sys.exit(1)
         # Get staged diff
         diff = GitService.get_staged_diff()
-    else:
-        print(f"{Colors.RED}❌ Error: No arguments detected{Colors.YELLOW, Colors.END}")
-        sys.exit(1)
 
     if not diff:
         print(f"{Colors.RED}❌ Error: Could not get git diff{Colors.YELLOW, Colors.END}")
