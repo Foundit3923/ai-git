@@ -85,7 +85,7 @@ class OllamaClient:
         # If no match, return first available
         return available[0]
     
-    def generate(self, prompt: str) -> Optional[str]:
+    def generate(self, prompt: str, ctx: int = 2026) -> Optional[str]:
         """Generate text using Ollama"""
         try:
             response = requests.post(
@@ -93,7 +93,10 @@ class OllamaClient:
                 json={
                     "model": self.model,
                     "prompt": prompt,
-                    "stream": False
+                    "stream": False,
+                    "options": {
+                        "num_ctx": ctx
+                    }
                 },
                 timeout=120  # Increased to 2 minutes for larger models
             )
@@ -152,6 +155,50 @@ class GitService:
         return bool(diff and diff.strip())
     
     @staticmethod
+    def validate_hash(hash: str) -> bool:
+        """Check if the repo has the specified hash"""
+        try:
+            subprocess.run(
+                ['git', 'branch', '--contains', hash],
+                check=True
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False
+        
+    @staticmethod
+    def retrieve_commit(hash: str) -> Optional[str]:
+        """Retrieve the diff of a commit from the current branch"""      
+        if GitService.validate_hash(hash):
+            try:
+                result = subprocess.run(
+                    ['git', 'show', hash ],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                ) 
+                return result.stdout
+            except subprocess.CalledProcessError:
+                return None
+    
+
+    @staticmethod
+    def retrieve_range_commit_diff(hash1: str, hash2: str) -> Optional[str]:
+        "Retrieve the diff between two commits from the current branch"
+        if GitService.validate_hash(hash1):
+            if GitService.validate_hash(hash2):
+                try:
+                    result = subprocess.run(
+                    ['git', 'diff', hash1, hash2 ],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                    ) 
+                    return result.stdout
+                except subprocess.CalledProcessError:
+                    return None
+    
+    @staticmethod
     def commit(message: str) -> bool:
         """Create a git commit with the given message"""
         try:
@@ -170,7 +217,7 @@ class CommitGenerator:
     def __init__(self, ollama_client: OllamaClient):
         self.ollama = ollama_client
     
-    def generate_message(self, diff: str, style: str = "conventional") -> Optional[str]:
+    def generate_commit_message(self, diff: str, style: str = "conventional") -> Optional[str]:
         """Generate a commit message from git diff"""
         
         prompts = {
@@ -208,6 +255,13 @@ Rules:
 - Blank line
 - Body: Explain what and why (not how)
 - Use bullet points if multiple changes
+- Blank line
+- New Files: List all new files (exclude .meta) and explain what and why (not how)
+- Use bullet points if multiple changes
+- Blank line
+- Altered Files: List all altered files (exclude .meta) and explain what and why (not how)
+- List new and modified methods within the altered file
+- Use bullet points if multiple new or modified methods
 
 Git diff:
 {diff}
@@ -215,9 +269,12 @@ Git diff:
 Generate ONLY the commit message, nothing else:"""
         }
         
-        prompt = prompts.get(style, prompts["conventional"]).format(diff=diff[:3000])  # Limit diff size
+        prompt = prompts.get(style, prompts["conventional"]).format(diff=diff)  # Limit diff size
         
-        message = self.ollama.generate(prompt)
+        tokens = len(prompt.split())
+        print(f"Prompt Length: {len(prompt)}")
+        print(f"Tokens Required: {tokens}")
+        message = self.ollama.generate(prompt, tokens)
         
         if message:
             # Clean up the message
@@ -229,7 +286,6 @@ Generate ONLY the commit message, nothing else:"""
             message = message.strip()
         
         return message
-
 
 def print_banner():
     """Print application banner"""
@@ -268,22 +324,94 @@ def get_user_choice(message: str) -> str:
 def main():
     """Main application entry point"""
     print_banner()
-    
+
+    parser = argparse.ArgumentParser()    
+    parser.add_argument("-s", "--staged", help="summarize staged changes", action="store_true", required=False)
+    parser.add_argument("-c", "--commit", help="summarize specific commit", nargs=1, required=False)
+    parser.add_argument("-r", "--range", help="summarize a range of commits", nargs=2, required=False)
+    parser.add_argument("-m", "--model", help="select a model", nargs=1, required=False)
+
+    args = parser.parse_args()
+
     # Check if we're in a git repository
     if not GitService.is_git_repo():
         print(f"{Colors.RED}❌ Error: Not a git repository{Colors.END}")
         print(f"{Colors.YELLOW}Please run this command in a git repository{Colors.END}")
         sys.exit(1)
-    
-    # Check for staged changes
-    if not GitService.has_staged_changes():
-        print(f"{Colors.YELLOW}⚠️  No staged changes found{Colors.END}")
-        print(f"{Colors.CYAN}Please stage your changes first:{Colors.END}")
-        print(f"  git add <files>")
-        sys.exit(1)
-    
     # Initialize Ollama client
     ollama = OllamaClient()
+    available = ollama.list_models()
+
+    if args.model is not None:
+        print(f"Checking if {args.model[0]} is available")
+        found = False
+        for model in available:
+            if args.model[0] in model:
+                found = True
+                break
+        if found:
+            selected_model = args.model[0]
+            shouldAutoSelect = False
+        else:
+            print(f"{Colors.RED}❌ Error: {args.model[0]} model not detected. Defaulting to auto-select{Colors.YELLOW, Colors.END}")
+            shouldAutoSelect = True
+
+    style = "conventional"
+    selected_model = "phi"
+    shouldAutoSelect = True
+    if args.range is not None:
+        print("summarize a range of commits")
+        diff = GitService.retrieve_range_commit_diff(args.range[0], args.range[1])
+        style = "detailed"
+        if args.model is None:
+            found = False
+            for model in available:
+                if "codellama" in model:
+                    found = True
+                    break
+            if found:
+                selected_model = "codellama"
+                shouldAutoSelect = False
+            else:
+                print(f"{Colors.RED}❌ Error: codellama model not detected. Defaulting to auto-select{Colors.YELLOW, Colors.END}")
+                shouldAutoSelect = True
+
+    elif args.commit is not None:
+        print(f"summarize the commit {args.commit}")
+        diff = GitService.retrieve_commit(args.commit[0])
+        style = "detailed"
+        if args.model is None:
+            found = False
+            for model in available:
+                if "codellama" in model:
+                    found = True
+                    break
+            if found:
+                selected_model = "codellama"
+                shouldAutoSelect = False
+            else:
+                print(f"{Colors.RED}❌ Error: codellama model not detected. Defaulting to auto-select{Colors.YELLOW, Colors.END}")
+                shouldAutoSelect = True
+    elif args.staged:
+        print("summarize staged changes")
+        # Check for staged changes
+        if not GitService.has_staged_changes():
+            print(f"{Colors.YELLOW}⚠️  No staged changes found{Colors.END}")
+            print(f"{Colors.CYAN}Please stage your changes first:{Colors.END}")
+            print(f"  git add <files>")
+            sys.exit(1)
+        # Get staged diff
+        diff = GitService.get_staged_diff()
+    else:
+        print(f"{Colors.RED}❌ Error: No arguments detected{Colors.YELLOW, Colors.END}")
+        sys.exit(1)
+
+    if not diff:
+        print(f"{Colors.RED}❌ Error: Could not get git diff{Colors.YELLOW, Colors.END}")
+        sys.exit(1)
+    
+
+
     
     # Check if Ollama is running
     print(f"{Colors.CYAN}🔍 Checking Ollama server...{Colors.END}")
@@ -313,30 +441,33 @@ def main():
     print()
     
     # Auto-select the best (lightest/fastest) model
-    selected_model = ollama.auto_select_model()
-    if selected_model:
-        ollama.model = selected_model
-        print(f"{Colors.GREEN}✓ Auto-selected: {Colors.BOLD}{selected_model}{Colors.END}")
-        print(f"{Colors.CYAN}  (Prioritizing lighter/faster models){Colors.END}\n")
+    if shouldAutoSelect:
+        selected_model = ollama.auto_select_model()
+        if selected_model:
+            ollama.model = selected_model
+            print(f"{Colors.GREEN}✓ Auto-selected: {Colors.BOLD}{selected_model}{Colors.END}")
+            print(f"{Colors.CYAN}  (Prioritizing lighter/faster models){Colors.END}\n")
+        else:
+            print(f"{Colors.YELLOW}Warning: Could not auto-select model, using first available{Colors.END}\n")
+            ollama.model = available_models[0]
     else:
-        print(f"{Colors.YELLOW}Warning: Could not auto-select model, using first available{Colors.END}\n")
-        ollama.model = available_models[0]
+        if selected_model:
+            ollama.model = selected_model
+            print(f"{Colors.GREEN}✓ Selected: {Colors.BOLD}{selected_model}{Colors.END}")
+        else:
+            print(f"{Colors.YELLOW}Warning: Could not auto-select model, using first available{Colors.END}\n")
+            ollama.model = available_models[0]
     
-    # Get staged diff
-    diff = GitService.get_staged_diff()
-    if not diff:
-        print(f"{Colors.RED}❌ Error: Could not get git diff{Colors.END}")
-        sys.exit(1)
     
     print_diff_summary(diff)
     
     # Generate commit message
     generator = CommitGenerator(ollama)
     
-    print(f"{Colors.CYAN}🤖 Generating commit message...{Colors.END}\n")
+    print(f"{Colors.CYAN}🤖 Generating {style} commit message...{Colors.END}\n")
     
     while True:
-        commit_message = generator.generate_message(diff, style="conventional")
+        commit_message = generator.generate_commit_message(diff, style=style)
         
         if not commit_message:
             print(f"{Colors.RED}❌ Failed to generate commit message{Colors.END}")
