@@ -380,7 +380,7 @@ class GitService:
                         ancestry_path.append(old_commit_hash)
                         return ancestry_path
                     except subprocess.CalledProcessError:
-                        return None
+                        raise ValueError(f"CalledProcessError when running subprocess to get ancestry path")
                 else:
                     raise ValueError(f"Old Commit Hash: ${old_commit_hash.hash} is not ancestor of New Commit Hash: ${new_commit_hash.hash}")
             else:
@@ -410,17 +410,18 @@ class GitService:
         return False
 
     @staticmethod
-    def get_all_files_touched_in_range(commit_range_list) -> Optional[list]:
+    def get_all_files_touched_in_range(commit_range_list: list[GitHash]) -> Optional[list]:
         list_of_unique_files = []
-        for commit_hash in commit_range_list:
-            if commit_hash.is_valid:
-                files_touched_in_commit = GitService.get_all_files_touched_in_commit(commit_hash)
-                for file_name_status in files_touched_in_commit:
-                    if ".meta" not in file_name_status:
-                        if file_name_status not in list_of_unique_files:
-                            list_of_unique_files.append(file_name_status)
-            else:
-                raise ValueError(f"Old Commit Hash: ${commit_hash.hash} is not valid")
+        if commit_range_list:
+            for commit_hash in commit_range_list:
+                if commit_hash.is_valid:
+                    files_touched_in_commit = GitService.get_all_files_touched_in_commit(commit_hash)
+                    for file_name_status in files_touched_in_commit:
+                        if ".meta" not in file_name_status:
+                            if file_name_status not in list_of_unique_files:
+                                list_of_unique_files.append(file_name_status)
+                else:
+                    raise ValueError(f"Old Commit Hash: ${commit_hash.hash} is not valid")
 
         return list_of_unique_files
 
