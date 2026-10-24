@@ -69,7 +69,7 @@ class FileDetails:
         
         if _file_path:
             self.file_path = _file_path
-            file_name = self.file_path.split('/')[-1]
+            self.file_name = self.file_path.split('/')[-1]
 
             self.is_new = _is_new
             self.is_changed = _is_changed   
@@ -113,16 +113,18 @@ class FileDetails:
     def get_oldest_commit_hash(self):
         for commit_hash in self.git_summary.commit_hashes_in_range[::-1]:
             files_touched_by_commit = GitService.get_all_files_touched_in_commit(commit_hash)
-            for file_data in files_touched_by_commit:
+            for file_data in files_touched_by_commit.split("\n\n")[-1].split("\n"):
                 if self.file_path in file_data:
                     self.oldest_commit_hash = commit_hash   
+                    #print(f"Oldest commit hash for {self.file_name}: {self.oldest_commit_hash}")
 
     def get_newest_commit_hash(self):
         for commit_hash in self.git_summary.commit_hashes_in_range:
             files_touched_by_commit = GitService.get_all_files_touched_in_commit(commit_hash)
-            for file_data in files_touched_by_commit:
+            for file_data in files_touched_by_commit.split("\n\n")[-1].split("\n"):
                 if self.file_path in file_data:
-                    self.oldest_commit_hash = commit_hash   
+                    self.newest_commit_hash = commit_hash   
+                    #print(f"Newest commit hash for {self.file_name}: {self.newest_commit_hash}")
 
     def get_oldest_version_of_file(self):
         if self.oldest_commit_hash:
@@ -420,7 +422,7 @@ class GitService:
             for commit_hash in commit_range_list:
                 if commit_hash.is_valid:
                     files_touched_in_commit = GitService.get_all_files_touched_in_commit(commit_hash)
-                    print(f"Files touched in commit: \n{files_touched_in_commit}")
+                    #print(f"Files touched in commit: \n{files_touched_in_commit}")
                     for file_name_status in files_touched_in_commit.split("\n\n")[-1].split("\n"):
                         if ".meta" not in file_name_status:
                             if file_name_status not in list_of_unique_files:
@@ -652,7 +654,6 @@ Summarize the reason this files has been added based on your analysis of the cha
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
-Concentrate your analysis on this file for motivation and context.
 
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
@@ -671,7 +672,6 @@ Summarize the changes and purpose of this file using the following:
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
-Concentrate your analysis on this file for motivation and context.
 
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
@@ -687,7 +687,6 @@ Summarize the reason this file has been removed based on your analysis of the ch
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
-Concentrate your analysis on this file for motivation and context.
 
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
@@ -695,14 +694,17 @@ Generate ONLY the summary, nothing else:""",
 
 
 "single_file_complete_file_changes_new": 
-"""You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
+"""You are a text editor, C Sharp, Unity, and git commit message expert. Analyze the following resource and generate a commit message following the Conventional Commits format.
 
-Summarize the reason this files has been added based on your analysis of the changes and purpose of this file using the following:
-- `The New Code`: {newest_commit_complete_file}
+Rules:
+- Use format: <type>(<scope>): <subject>
+- Types: feat, fix, docs, style, refactor, test, chore
+- Subject should be lowercase, no period at end
+- Address each change (Important)
+- If needed, add a body explaining what and why (not how)
+
+what does the following code do?: {newest_commit_complete_file}
 Concentrate your analysis on these files for the summary.
-
-Contextualize your summary with information from this diff: {diff}. 
-Concentrate your analysis on this file for motivation and context.
 
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
@@ -717,9 +719,6 @@ Summarize the changes and purpose of this file using the following:
 - `The New Code`: {newest_commit_complete_file}
 Concentrate your analysis on these files for the summary.
 
-Contextualize your summary with information from this diff: {diff}. 
-Concentrate your analysis on this file for motivation and context.
-
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
 Generate ONLY the summary, nothing else:""",
@@ -731,9 +730,6 @@ Generate ONLY the summary, nothing else:""",
 Summarize the reason this file has been removed based on your analysis of the changes and purpose of this file using the following:
 - `The Old Code`: {oldest_commit_complete_file}
 Concentrate your analysis on these files for the summary.
-
-Contextualize your summary with information from this diff: {diff}. 
-Concentrate your analysis on this file for motivation and context.
 
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
@@ -747,9 +743,6 @@ Summarize the reason this files has been added based on your analysis of the cha
 - `The New Diff`: {oldest_newest_diff}
 Concentrate your analysis on these files for the summary.
 
-Contextualize your summary with information from this diff: {diff}. 
-Concentrate your analysis on this file for motivation and context.
-
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
 Generate ONLY the summary, nothing else:""",
@@ -761,9 +754,6 @@ Generate ONLY the summary, nothing else:""",
 Summarize the changes and purpose of this file using the following:
 - `The Changes`: {oldest_newest_diff}
 Concentrate your analysis on these files for the summary.
-
-Contextualize your summary with information from this diff: {diff}. 
-Concentrate your analysis on this file for motivation and context.
 
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
@@ -777,9 +767,6 @@ Summarize the reason this file has been removed based on your analysis of the ch
 - `The Changes`: {oldest_newest_diff}
 Concentrate your analysis on these files for the summary.
 
-Contextualize your summary with information from this diff: {diff}. 
-Concentrate your analysis on this file for motivation and context.
-
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
 Generate ONLY the summary, nothing else:""",
@@ -789,6 +776,7 @@ Generate ONLY the summary, nothing else:""",
         for promptkey in prompts.keys():
             if style in str(promptkey):
                 print(f"Generating {promptkey} prompt for {file_details.file_name}")
+                print(f"newest_commit_complete_file: " + file_details.newest_commit_complete_file)
                 prompt = prompts.get(promptkey, prompts["single_file_general_new"]).format(diff=diff, 
                                                                                            newest_commit_complete_file = file_details.newest_commit_complete_file,
                                                                                            complete_file_changes_summary = file_details.ai_summary.complete_file_changes_summary, 
@@ -815,7 +803,6 @@ Generate ONLY the summary, nothing else:""",
         message = finalmessage
         
         return message
-
 
 class GitSummary:
     generator = None #CommitGenerator(ollama)
@@ -877,10 +864,10 @@ class GitSummary:
 
     def compile_list_of_all_files_touched_in_range(self):
         self.all_files_raw = GitService.get_all_files_touched_in_range(self.commit_hashes_in_range)
-        print("Printing raw file names:")
-        print(f"Raw file name count: {self.all_files_raw.count()}")
-        for file_name in self.all_files_raw:
-            print(file_name)
+        # print("Printing raw file names:")
+        print(f"Raw file name count: {len(self.all_files_raw)}")
+        # for file_name in self.all_files_raw:
+        #     print(file_name)
     
     def compile_list_of_all_new_files(self):
         count = 0
@@ -926,7 +913,7 @@ class GitSummary:
 
     def generate_summaries(self):
         count = 1
-        total = self.new_files.count() + self.changed_files.count() + self.removed_files.count()
+        total = len(self.new_files) + len(self.changed_files) + len(self.removed_files)
         print(f"Generating AiSummaries for New Files:")
         for new_file_details in self.new_files:
             print(f"{count}/ {total}")
