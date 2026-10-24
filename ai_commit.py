@@ -42,11 +42,11 @@ class GitHash:
     def __init__(self, _hash: str):
         if _hash:
             self.hash = _hash
-            if GitService.validate_hash(hash):
+            if GitService.validate_hash(self.hash):
                 self.is_valid = True
 
 class FileDetails:
-    git_summary = None #GitSummary
+    git_summary: 'GitSummary' = None #GitSummary
     file_path = ""
     file_name = ""
     oldest_commit_hash = None #GitHash
@@ -61,7 +61,7 @@ class FileDetails:
     is_ready = False
     has_summary = False
 
-    def __init__(self, _git_summary: GitSummary, _file_path: str, _is_new: bool, _is_changed: bool, _is_removed: bool):
+    def __init__(self, _git_summary: 'GitSummary', _file_path: str, _is_new: bool, _is_changed: bool, _is_removed: bool):
         if (_git_summary):
             self.git_summary = _git_summary
         else:
@@ -147,114 +147,7 @@ class FileDetails:
         print(f"{Colors.CYAN}{'─' * 25}{Colors.END}\n")
         
 
-class GitSummary:
-    generator = None #CommitGenerator(ollama)
-    diff = ""
-    commit_hash_range_oldest: GitHash = None #GitHash
-    commit_hash_range_newest: GitHash = None #GitHash
-    commit_hashes_in_range: list[GitHash] = [] #GitHash[]
-    all_files_raw = [] #str
-    new_files: list[FileDetails] = [] #FileDetails[]
-    changed_files: list[FileDetails] = [] #FileDetails[]
-    removed_files: list[FileDetails] = [] #FileDetails[]
-    is_range = False
-    is_staged = False
-    is_ready = False
 
-    def __init__(self, _commit_hash_1: str, _commit_hash_2: str, _generator: CommitGenerator, _diff: str ):
-        staged_check = False
-        git_hash_1 = GitHash(_commit_hash_1)
-        if git_hash_1.is_valid:
-            self.commit_hash_range_oldest = git_hash_1 
-        elif _commit_hash_1 is None:
-            raise ValueError(f"Commit hash 1: ${_commit_hash_1} is not valid")
-        else:
-            staged_check = True
-
-        git_hash_2 = GitHash(_commit_hash_2)
-        if git_hash_2.is_valid:
-            self.commit_hash_range_newest = git_hash_2
-        elif _commit_hash_2 is None:
-            raise ValueError(f"Commit hash 2: ${_commit_hash_2} is not valid")
-        else:
-            if staged_check:
-                if GitService.has_staged_changes():
-                    self.is_staged = True
-
-        if self.is_staged is False:
-            if self.commit_hash_range_oldest.hash is not self.commit_hash_range_newest.hash:
-                self.is_range = True
-
-        if _generator:
-            self.generator = _generator    
-
-        if _diff:
-            self.diff = _diff   
-
-        if self.is_range:
-            self.compile_all_commit_hashes_in_range()
-        else:
-            self.commit_hashes_in_range.append(self.commit_hash_range_oldest)
-
-        self.compile_list_of_all_files_touched_in_range()
-        self.compile_list_of_all_new_files()
-        self.compile_list_of_all_removed_files()
-        self.compile_list_of_all_changed_files()
-        self.is_ready = True
-
-    def compile_all_commit_hashes_in_range(self):
-        self.commit_hashes_in_range = GitService.get_list_of_ancestry_path(self.commit_hash_range_oldest, self.commit_hash_range_newest)
-
-    def compile_list_of_all_files_touched_in_range(self):
-        self.all_files_raw = GitService.get_all_files_touched_in_range(self.commit_hashes_in_range)
-    
-    def compile_list_of_all_new_files(self):
-        for file in self.all_files_raw:
-            if file[0] is 'A':
-                name_only = file[1:].lstrip()
-                file_details = FileDetails(self, name_only, True, False, False)
-                if file_details not in self.new_files:
-                    self.new_files.append(name_only)
-
-    def compile_list_of_all_removed_files(self):
-        for file in self.all_files_raw:
-            if file[0] is 'D':
-                name_only = file[1:].lstrip()
-                if name_only not in self.removed_files:
-                    self.removed_files.append(name_only)
-
-    def compile_list_of_all_changed_files(self):
-        for file in self.all_files_raw:
-            if file[0] is 'M':
-                name_only = file[1:].lstrip()
-                if name_only not in self.changed_files:
-                    self.changed_files.append(name_only)
-
-    def generate_summaries(self):
-        for new_file_details in self.new_files:
-            new_file_details.get_ai_summary()
-
-        for changed_file_details in self.changed_files:
-            changed_file_details.get_ai_summary()
-
-        for removed_file_details in self.removed_files:
-            removed_file_details.get_ai_summary()
-
-    def print_summaries(self):
-        print(f"{Colors.GREEN}{Colors.BOLD} New Files:{Colors.END}\n")
-        print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
-        for new_file_details in self.new_files:
-            new_file_details.print_summary()
-
-        print(f"\n{Colors.GREEN}{Colors.BOLD} Changed Files:{Colors.END}\n")
-        print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
-        for changed_file_details in self.changed_files:
-            changed_file_details.print_summary()
-
-        print(f"\n{Colors.GREEN}{Colors.BOLD} Removed Files:{Colors.END}\n")
-        print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
-        for removed_file_details in self.removed_files:
-            removed_file_details.print_summary()
         
 
 class OllamaClient:
@@ -392,10 +285,9 @@ class GitService:
                 text=True,
                 check=True
             )
-            print(result.stdout)
-            return True
+            return result.stdout
         except subprocess.CalledProcessError:
-            return False
+            return None
         
     @staticmethod
     def stage_all_changes() -> bool:
@@ -412,8 +304,6 @@ class GitService:
     @staticmethod
     def has_staged_changes() -> bool:
         """Check if there are staged changes"""
-        diff = GitService.get_staged_diff()
-        return bool(diff and diff.strip())
     
     @staticmethod
     def validate_hash(hash: str) -> bool:
@@ -477,7 +367,7 @@ class GitService:
                 if (GitService.is_ancestor(old_commit_hash, new_commit_hash)):
                     try:
                         result = subprocess.run(
-                            ['git', 'rev-list', '--ancestry-path', old_commit_hash, new_commit_hash ],
+                            ['git', 'rev-list', '--ancestry-path', old_commit_hash.hash, new_commit_hash.hash ],
                             capture_output=True,
                             text=True,
                             check=True
@@ -492,11 +382,11 @@ class GitService:
                     except subprocess.CalledProcessError:
                         return None
                 else:
-                    raise ValueError(f"Old Commit Hash: ${old_commit_hash} is not ancestor of New Commit Hash: ${new_commit_hash}")
+                    raise ValueError(f"Old Commit Hash: ${old_commit_hash.hash} is not ancestor of New Commit Hash: ${new_commit_hash.hash}")
             else:
-                raise ValueError(f"New Commit Hash: ${new_commit_hash} is not valid")
+                raise ValueError(f"New Commit Hash: ${new_commit_hash.hash} is not valid")
         else:
-            raise ValueError(f"Old Commit Hash: ${old_commit_hash} is not valid")
+            raise ValueError(f"Old Commit Hash: ${old_commit_hash.hash} is not valid")
 
     @staticmethod
     def is_ancestor(maybe_old_commit_hash: GitHash, maybe_new_commit_hash: GitHash) -> bool:
@@ -504,16 +394,18 @@ class GitService:
             if maybe_new_commit_hash.is_valid:
                 try:
                     result = subprocess.run(
-                        ['git', 'merge-base', '--is-ancestor', maybe_old_commit_hash, maybe_new_commit_hash ],
+                        ['git', 'merge-base', '--is-ancestor', maybe_old_commit_hash.hash, maybe_new_commit_hash.hash ],
+                        capture_output=True,
+                        text=True,
                         check=True
                     ) 
-                    return True if result is 0 else False
+                    return result.returncode == 0
                 except subprocess.CalledProcessError:
                     return False
             else:
-                raise ValueError(f"Maybe New Commit hash: ${maybe_new_commit_hash} is not valid")
+                raise ValueError(f"Maybe New Commit hash: ${maybe_new_commit_hash.hash} is not valid")
         else:
-            raise ValueError(f"Maybe New Commit Hash: ${maybe_old_commit_hash} is not valid")
+            raise ValueError(f"Maybe New Commit Hash: ${maybe_old_commit_hash.hash} is not valid")
 
         return False
 
@@ -695,7 +587,7 @@ Rules:
 Generate ONLY the commit message, nothing else:"""
         }
 
-        if style is "detailed":
+        if style == "detailed":
             finalmessage = ""
             for promptkey in prompts.keys():
                 if style in str(promptkey):
@@ -902,6 +794,116 @@ Generate ONLY the summary, nothing else:""",
 
         
         return message
+
+
+class GitSummary:
+    generator = None #CommitGenerator(ollama)
+    diff = ""
+    commit_hash_range_oldest: GitHash = None #GitHash
+    commit_hash_range_newest: GitHash = None #GitHash
+    commit_hashes_in_range: list[GitHash] = [] #GitHash[]
+    all_files_raw = [] #str
+    new_files: list[FileDetails] = [] #FileDetails[]
+    changed_files: list[FileDetails] = [] #FileDetails[]
+    removed_files: list[FileDetails] = [] #FileDetails[]
+    is_range = False
+    is_staged = False
+    is_ready = False
+
+    def __init__(self, _commit_hash_1: str, _commit_hash_2: str, _generator: CommitGenerator, _diff: str ):
+        staged_check = False
+        git_hash_1 = GitHash(_commit_hash_1)
+        if git_hash_1.is_valid:
+            self.commit_hash_range_oldest = git_hash_1 
+        elif _commit_hash_1 is None:
+            raise ValueError(f"Commit hash 1: ${_commit_hash_1} is not valid")
+        else:
+            staged_check = True
+
+        git_hash_2 = GitHash(_commit_hash_2)
+        if git_hash_2.is_valid:
+            self.commit_hash_range_newest = git_hash_2
+        elif _commit_hash_2 is None:
+            raise ValueError(f"Commit hash 2: ${_commit_hash_2} is not valid")
+        else:
+            if staged_check:
+                if GitService.has_staged_changes():
+                    self.is_staged = True
+
+        if self.is_staged is False:
+            if self.commit_hash_range_oldest.hash is not self.commit_hash_range_newest.hash:
+                self.is_range = True
+
+        if _generator:
+            self.generator = _generator    
+
+        if _diff:
+            self.diff = _diff   
+
+        if self.is_range:
+            self.compile_all_commit_hashes_in_range()
+        else:
+            self.commit_hashes_in_range.append(self.commit_hash_range_oldest)
+
+        self.compile_list_of_all_files_touched_in_range()
+        self.compile_list_of_all_new_files()
+        self.compile_list_of_all_removed_files()
+        self.compile_list_of_all_changed_files()
+        self.is_ready = True
+
+    def compile_all_commit_hashes_in_range(self):
+        self.commit_hashes_in_range = GitService.get_list_of_ancestry_path(self.commit_hash_range_oldest, self.commit_hash_range_newest)
+
+    def compile_list_of_all_files_touched_in_range(self):
+        self.all_files_raw = GitService.get_all_files_touched_in_range(self.commit_hashes_in_range)
+    
+    def compile_list_of_all_new_files(self):
+        for file in self.all_files_raw:
+            if file[0] == 'A':
+                name_only = file[1:].lstrip()
+                file_details = FileDetails(self, name_only, True, False, False)
+                if file_details not in self.new_files:
+                    self.new_files.append(name_only)
+
+    def compile_list_of_all_removed_files(self):
+        for file in self.all_files_raw:
+            if file[0] == 'D':
+                name_only = file[1:].lstrip()
+                if name_only not in self.removed_files:
+                    self.removed_files.append(name_only)
+
+    def compile_list_of_all_changed_files(self):
+        for file in self.all_files_raw:
+            if file[0] == 'M':
+                name_only = file[1:].lstrip()
+                if name_only not in self.changed_files:
+                    self.changed_files.append(name_only)
+
+    def generate_summaries(self):
+        for new_file_details in self.new_files:
+            new_file_details.get_ai_summary()
+
+        for changed_file_details in self.changed_files:
+            changed_file_details.get_ai_summary()
+
+        for removed_file_details in self.removed_files:
+            removed_file_details.get_ai_summary()
+
+    def print_summaries(self):
+        print(f"{Colors.GREEN}{Colors.BOLD} New Files:{Colors.END}\n")
+        print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
+        for new_file_details in self.new_files:
+            new_file_details.print_summary()
+
+        print(f"\n{Colors.GREEN}{Colors.BOLD} Changed Files:{Colors.END}\n")
+        print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
+        for changed_file_details in self.changed_files:
+            changed_file_details.print_summary()
+
+        print(f"\n{Colors.GREEN}{Colors.BOLD} Removed Files:{Colors.END}\n")
+        print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
+        for removed_file_details in self.removed_files:
+            removed_file_details.print_summary()
 
 def print_banner():
     """Print application banner"""
