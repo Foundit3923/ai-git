@@ -111,7 +111,7 @@ class FileDetails:
         return NotImplemented   
 
     def get_oldest_commit_hash(self):
-        for commit_hash in self.git_summary.commit_hashes_in_range.reverse:
+        for commit_hash in self.git_summary.commit_hashes_in_range[::-1]:
             files_touched_by_commit = GitService.get_all_files_touched_in_commit(commit_hash)
             for file_data in files_touched_by_commit:
                 if self.file_path in file_data:
