@@ -135,8 +135,9 @@ class FileDetails:
             self.newest_commit_complete_file = GitService.get_file_from_commit(self.file_path, self.newest_commit_hash)
 
     def get_oldest_newest_diff(self):
-        if self.oldest_commit_hash and self.newest_commit_hash:
-            self.oldest_newest_diff = GitService.get_file_diff_between_commits(self.file_path, self.oldest_commit_hash, self.newest_commit_hash)
+        if self.is_changed:
+            if self.oldest_commit_hash and self.newest_commit_hash:
+                self.oldest_newest_diff = GitService.get_file_diff_between_commits(self.file_path, self.oldest_commit_hash, self.newest_commit_hash)
 
     def get_ai_summary(self):
         if self.is_ready:
@@ -218,6 +219,7 @@ class OllamaClient:
     
     def generate(self, prompt: str, ctx: int = 2026) -> Optional[str]:
         """Generate text using Ollama"""
+        result = ""
         try:
             response = requests.post(
                 f"{self.base_url}/api/generate",
@@ -226,27 +228,49 @@ class OllamaClient:
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "num_ctx": ctx
+                        "num_ctx": 4096,
+                        "num_gpu": 28,
                     }
                 },
                 timeout=120  # Increased to 2 minutes for larger models
             )
             
             if response.status_code == 200:
-                return response.json().get('response', '').strip()
+                result = response.json().get('response', '').strip()
             else:
                 print(f"{Colors.RED}Ollama returned status {response.status_code}{Colors.END}")
-                return None
+                result = None
         except requests.exceptions.Timeout:
             print(f"{Colors.RED}Request timed out. Model '{self.model}' might be too large.{Colors.END}")
             print(f"{Colors.YELLOW}Try using a lighter model like 'phi' or 'mistral'{Colors.END}")
-            return None
+            result = None
         except requests.exceptions.ConnectionError:
             print(f"{Colors.RED}Cannot connect to Ollama at {self.base_url}{Colors.END}")
-            return None
+            result = None
         except requests.exceptions.RequestException as e:
             print(f"{Colors.RED}Error: {e}{Colors.END}")
-            return None
+            result = None
+
+        #self.shut_down_model()
+        return result
+
+    def shut_down_model(self):
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/generate -d ",
+                json={
+                    "model": self.model,
+                    "keep_alive": 0
+                },
+                timeout=120  # Increased to 2 minutes for larger models
+            )
+        except requests.exceptions.Timeout:
+            print(f"{Colors.RED}Request timed out. Model '{self.model}' might be too large.{Colors.END}")
+            print(f"{Colors.YELLOW}Try using a lighter model like 'phi' or 'mistral'{Colors.END}")
+        except requests.exceptions.ConnectionError:
+            print(f"{Colors.RED}Cannot connect to Ollama at {self.base_url}{Colors.END}")
+        except requests.exceptions.RequestException as e:
+            print(f"{Colors.RED}Error: {e}{Colors.END}")
 
 class GitService:
     """Service for Git operations"""
@@ -425,8 +449,11 @@ class GitService:
                     #print(f"Files touched in commit: \n{files_touched_in_commit}")
                     for file_name_status in files_touched_in_commit.split("\n\n")[-1].split("\n"):
                         if ".meta" not in file_name_status:
-                            if file_name_status not in list_of_unique_files:
-                                list_of_unique_files.append(file_name_status)
+                            if ".json" not in file_name_status:
+                                if ".png" not in file_name_status:
+                                    if ".jpg" not in file_name_status:
+                                        if file_name_status not in list_of_unique_files:
+                                            list_of_unique_files.append(file_name_status)
                 else:
                     raise ValueError(f"Old Commit Hash: ${commit_hash.hash} is not valid")
 
@@ -646,11 +673,16 @@ Generate ONLY the commit message, nothing else:"""
         
         prompts = {
 "single_file_general_new": 
-"""You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
+"""You are a text editor, C Sharp, Unity, and git commit message expert. Analyze the following resource and generate a commit message following the Conventional Commits format.
 
-Summarize the reason this files has been added based on your analysis of the changes and purpose of this file using the following:
-- `The New Code`: {newest_commit_complete_file}
-- Summary based on `The New Code`: {complete_file_changes_summary}
+Rules:
+- Use format: <type>(<scope>): <subject>
+- Types: feat, fix, docs, style, refactor, test, chore
+- Subject should be lowercase, no period at end
+- Address each change (Important)
+- If needed, add a body explaining what and why (not how)
+
+Using this code:{newest_commit_complete_file} and this diff:{complete_file_changes_summary} describe what the code does.
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -661,14 +693,16 @@ Generate ONLY the summary, nothing else:""",
 
 
 "single_file_general_changed": 
-"""You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the changes and purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
+"""You are a text editor, C Sharp, Unity, and git commit message expert. Analyze the following resource and generate a commit message following the Conventional Commits format.
 
-Summarize the changes and purpose of this file using the following:
-- `The Old Code`: {oldest_commit_complete_file}
-- `The New Code`: {newest_commit_complete_file}
-- `The Changes`: {oldest_newest_diff}
-- Summary comparing `The Old Code` and `The New Code`: {complete_file_changes_summary}
-- Summary based on `The Changes`: {oldest_newest_diff_summary}
+Rules:
+- Use format: <type>(<scope>): <subject>
+- Types: feat, fix, docs, style, refactor, test, chore
+- Subject should be lowercase, no period at end
+- Address each change (Important)
+- If needed, add a body explaining what and why (not how)
+
+Compare this old code: {oldest_commit_complete_file} and this new code: {newest_commit_complete_file}, and this summary of the changes:{complete_file_changes_summary} and this diff:{oldest_newest_diff}, and this summary of the diff:{oldest_newest_diff_summary}. Describe what the new code does and what has changed.
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -679,11 +713,16 @@ Generate ONLY the summary, nothing else:""",
 
 
 "single_file_general_removed": 
-"""You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the reason that this file has been removed by analyzing the following summaries, git diff, and files based on the provided references.
+"""You are a text editor, C Sharp, Unity, and git commit message expert. Analyze the following resource and generate a commit message following the Conventional Commits format.
 
-Summarize the reason this file has been removed based on your analysis of the changes and purpose of this file using the following:
-- `The Old Code`: {oldest_commit_complete_file}
-- Summary based on `The Old Code`: {complete_file_changes_summary}
+Rules:
+- Use format: <type>(<scope>): <subject>
+- Types: feat, fix, docs, style, refactor, test, chore
+- Subject should be lowercase, no period at end
+- Address each change (Important)
+- If needed, add a body explaining what and why (not how)
+
+Using this code:{oldest_commit_complete_file} and this summary:{complete_file_changes_summary}, describe what the code does
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -703,7 +742,7 @@ Rules:
 - Address each change (Important)
 - If needed, add a body explaining what and why (not how)
 
-what does the following code do?: {newest_commit_complete_file}
+What does the following code do?: {newest_commit_complete_file}
 Concentrate your analysis on these files for the summary.
 
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
@@ -712,11 +751,11 @@ Generate ONLY the summary, nothing else:""",
 
 
 "single_file_complete_file_changes_changed": 
-"""You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the changes and purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
+"""You are a text editor, C Sharp, Unity, and git commit message expert. Analyze the following resource and generate a commit message following the Conventional Commits format.
 
-Summarize the changes and purpose of this file using the following:
-- `The Old Code`: {oldest_commit_complete_file}
-- `The New Code`: {newest_commit_complete_file}
+What does this old code do:{oldest_commit_complete_file}
+What does this new code do:{newest_commit_complete_file}
+Describe what changed
 Concentrate your analysis on these files for the summary.
 
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
@@ -736,18 +775,6 @@ comments are indicated by '//', these provide context but are not always correct
 Generate ONLY the summary, nothing else:""",
 
 
-"single_file_oldest_newest_diff_new": 
-"""You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the reason and purpose this file has been added by analyzing the following diffs and files based on the provided references.
-
-Summarize the reason this files has been added based on your analysis of the changes and purpose of this file using the following:
-- `The New Diff`: {oldest_newest_diff}
-Concentrate your analysis on these files for the summary.
-
-comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
-
-Generate ONLY the summary, nothing else:""",
-
-
 "single_file_oldest_newest_diff_changed": 
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the changes and purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
 
@@ -757,32 +784,41 @@ Concentrate your analysis on these files for the summary.
 
 comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
 
-Generate ONLY the summary, nothing else:""",
-
-
-"single_file_oldest_newest_diff_removed": 
-"""You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the reason that this file has been removed by analyzing the following summaries, git diff, and files based on the provided references.
-
-Summarize the reason this file has been removed based on your analysis of the changes and purpose of this file using the following:
-- `The Changes`: {oldest_newest_diff}
-Concentrate your analysis on these files for the summary.
-
-comments are indicated by '//', these provide context but are not always correct, evaluate for yourself
-
-Generate ONLY the summary, nothing else:""",
+Generate ONLY the summary, nothing else:"""
         }
 
         finalmessage = ""
         for promptkey in prompts.keys():
             if style in str(promptkey):
+                _newest_commit_complete_file = " "
+                _complete_file_changes_summary = " "
+                _oldest_commit_complete_file = " "
+                _oldest_newest_diff = " "
+                _oldest_newest_diff_summary = " "
+                if file_details.newest_commit_complete_file:
+                    _newest_commit_complete_file = file_details.newest_commit_complete_file
+                if file_details.ai_summary.complete_file_changes_summary:
+                    _complete_file_changes_summary = file_details.ai_summary.complete_file_changes_summary
+                if file_details.oldest_commit_complete_file:
+                    _oldest_commit_complete_file = file_details.oldest_commit_complete_file
+                if file_details.oldest_newest_diff:
+                    _oldest_newest_diff = file_details.oldest_newest_diff
+                if file_details.ai_summary.oldest_newest_diff_summary:
+                    _oldest_newest_diff_summary = file_details.ai_summary.oldest_newest_diff_summary
+
                 print(f"Generating {promptkey} prompt for {file_details.file_name}")
-                print(f"newest_commit_complete_file: " + file_details.newest_commit_complete_file)
+                # print(f"newest_commit_complete_file: " + "\n" + _newest_commit_complete_file)
+                # print(f"oldest_commit_complete_file: " + "\n" + _oldest_commit_complete_file)
+                # if file_details.is_changed:
+                #     print(f"oldest_newest_diff: " + "\n" + _oldest_newest_diff)
+
+
                 prompt = prompts.get(promptkey, prompts["single_file_general_new"]).format(diff=diff, 
-                                                                                           newest_commit_complete_file = file_details.newest_commit_complete_file,
-                                                                                           complete_file_changes_summary = file_details.ai_summary.complete_file_changes_summary, 
-                                                                                           oldest_commit_complete_file = file_details.oldest_commit_complete_file, 
-                                                                                           oldest_newest_diff = file_details.oldest_newest_diff, 
-                                                                                           oldest_newest_diff_summary = file_details.ai_summary.oldest_newest_diff_summary )  # Limit diff size
+                                                                                           newest_commit_complete_file = _newest_commit_complete_file,
+                                                                                           complete_file_changes_summary = _complete_file_changes_summary, 
+                                                                                           oldest_commit_complete_file = _oldest_commit_complete_file, 
+                                                                                           oldest_newest_diff = _oldest_newest_diff, 
+                                                                                           oldest_newest_diff_summary = _oldest_newest_diff_summary )  # Limit diff size
                 tokens = len(prompt.split())
                 print(f"Prompt Length: {len(prompt)}")
                 print(f"Tokens Required: {tokens}")
