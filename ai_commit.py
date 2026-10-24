@@ -788,7 +788,7 @@ Generate ONLY the summary, nothing else:""",
         finalmessage = ""
         for promptkey in prompts.keys():
             if style in str(promptkey):
-                print(f"Generating {promptkey} prompt")
+                print(f"Generating {promptkey} prompt for {file_details.file_name}")
                 prompt = prompts.get(promptkey, prompts["single_file_general_new"]).format(diff=diff, 
                                                                                            newest_commit_complete_file = file_details.newest_commit_complete_file,
                                                                                            complete_file_changes_summary = file_details.ai_summary.complete_file_changes_summary, 
@@ -878,6 +878,7 @@ class GitSummary:
     def compile_list_of_all_files_touched_in_range(self):
         self.all_files_raw = GitService.get_all_files_touched_in_range(self.commit_hashes_in_range)
         print("Printing raw file names:")
+        print(f"Raw file name count: {self.all_files_raw.count()}")
         for file_name in self.all_files_raw:
             print(file_name)
     
@@ -924,14 +925,25 @@ class GitSummary:
         print(f"Failed FileDetails in self.changed_files: {count}")
 
     def generate_summaries(self):
+        count = 1
+        total = self.new_files.count() + self.changed_files.count() + self.removed_files.count()
+        print(f"Generating AiSummaries for New Files:")
         for new_file_details in self.new_files:
+            print(f"{count}/ {total}")
             new_file_details.get_ai_summary()
+            count = count + 1
 
+        print(f"Generating AiSummaries for Changed Files:")
         for changed_file_details in self.changed_files:
+            print(f"{count}/ {total}")
             changed_file_details.get_ai_summary()
+            count = count + 1
 
+        print(f"Generating AiSummaries for Removed Files:")
         for removed_file_details in self.removed_files:
+            print(f"{count}/ {total}")
             removed_file_details.get_ai_summary()
+            count = count + 1
 
     def print_summaries(self):
         print(f"{Colors.GREEN}{Colors.BOLD} New Files:{Colors.END}\n")
