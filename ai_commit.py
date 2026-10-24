@@ -1216,18 +1216,17 @@ def main():
     generator = CommitGenerator(ollama)
     
     print(f"{Colors.CYAN}🤖 Generating {style} commit message...{Colors.END}\n")
-
-    git_summary = None
-
-    if oldest_commit_hash and newest_commit_hash:
-        print(f"{Colors.CYAN}🤖 Building {style} git summary...{Colors.END}\n")
-        git_summary = GitSummary(oldest_commit_hash, newest_commit_hash, generator, diff)
-        while True:
-            if git_summary.is_ready:
-                break;
-        git_summary.generate_summaries()
     
     while True:
+        git_summary = None
+        if oldest_commit_hash and newest_commit_hash:
+            print(f"{Colors.CYAN}🤖 Building {style} git summary...{Colors.END}\n")
+            git_summary = GitSummary(oldest_commit_hash, newest_commit_hash, generator, diff)
+            while True:
+                if git_summary.is_ready:
+                    break;
+            git_summary.generate_summaries()
+
         commit_message = generator.generate_commit_message(diff, style=style)
         
         if not commit_message:
