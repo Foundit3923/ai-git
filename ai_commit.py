@@ -70,34 +70,34 @@ class FileDetails:
         if _file_path:
             self.file_path = _file_path
             file_name = self.file_path.split('/')[-1]
+
+            self.is_new = _is_new
+            self.is_changed = _is_changed   
+            self.is_removed = _is_removed
+
+            self.ai_summary = AiSummary()
+
+            suffix = ""
+            if self.is_new:
+                suffix = "_new"
+            elif self.is_changed:
+                suffix = "_changed"
+            elif self.is_removed:
+                suffix = "_removed"
+
+            self.ai_summary.complete_file_changes_summary_type = self.ai_summary.complete_file_changes_summary_type + suffix
+            self.ai_summary.general_summary_type = self.ai_summary.general_summary_type + suffix
+            self.ai_summary.oldest_newest_diff_summary_type = self.ai_summary.oldest_newest_diff_summary_type + suffix
+
+            self.get_oldest_commit_hash()
+            self.get_newest_commit_hash()
+            self.get_oldest_version_of_file()
+            self.get_newest_version_of_file()
+            self.get_oldest_newest_diff()
+            self.is_ready = True
         else:
-            raise ValueError(f"File path: ${_file_path} is not valid")
+            print(f"File path: ${_file_path} is not valid")
 
-    
-        self.is_new = _is_new
-        self.is_changed = _is_changed   
-        self.is_removed = _is_removed
-
-        self.ai_summary = AiSummary()
-
-        suffix = ""
-        if self.is_new:
-            suffix = "_new"
-        elif self.is_changed:
-            suffix = "_changed"
-        elif self.is_removed:
-            suffix = "_removed"
-
-        self.ai_summary.complete_file_changes_summary_type = self.ai_summary.complete_file_changes_summary_type + suffix
-        self.ai_summary.general_summary_type = self.ai_summary.general_summary_type + suffix
-        self.ai_summary.oldest_newest_diff_summary_type = self.ai_summary.oldest_newest_diff_summary_type + suffix
-
-        self.get_oldest_commit_hash()
-        self.get_newest_commit_hash()
-        self.get_oldest_version_of_file()
-        self.get_newest_version_of_file()
-        self.get_oldest_newest_diff()
-        self.is_ready = True
 
     def __key(self):
         return (self.file_path)
@@ -367,20 +367,21 @@ class GitService:
                 if (GitService.is_ancestor(old_commit_hash, new_commit_hash)):
                     try:
                         result = subprocess.run(
-                            ['git', 'rev-list', '--ancestry-path', old_commit_hash.hash, new_commit_hash.hash ],
+                            ['git', 'rev-list', '--ancestry-path', "^" + old_commit_hash.hash, new_commit_hash.hash ],
                             capture_output=True,
                             text=True,
                             check=True
                         ) 
+                        print("ancestry list subprocess completed")
                         ancestry_path = []
-                        for hash in result.stdout:
+                        for hash in result.stdout.split('\n'):
                             git_hash = GitHash(hash)
                             if git_hash.is_valid:
                                 ancestry_path.append(git_hash)
                         ancestry_path.append(old_commit_hash)
                         return ancestry_path
                     except subprocess.CalledProcessError:
-                        raise ValueError(f"CalledProcessError when running subprocess to get ancestry path")
+                        raise ValueError(f"CalledProcessError when running subprocess to get ancestry path ")
                 else:
                     raise ValueError(f"Old Commit Hash: ${old_commit_hash.hash} is not ancestor of New Commit Hash: ${new_commit_hash.hash}")
             else:
@@ -416,7 +417,8 @@ class GitService:
             for commit_hash in commit_range_list:
                 if commit_hash.is_valid:
                     files_touched_in_commit = GitService.get_all_files_touched_in_commit(commit_hash)
-                    for file_name_status in files_touched_in_commit:
+                    print(f"Files touched in commit: \n{files_touched_in_commit}")
+                    for file_name_status in files_touched_in_commit.split("\n\n")[-1].split("\n"):
                         if ".meta" not in file_name_status:
                             if file_name_status not in list_of_unique_files:
                                 list_of_unique_files.append(file_name_status)
@@ -857,28 +859,48 @@ class GitSummary:
 
     def compile_list_of_all_files_touched_in_range(self):
         self.all_files_raw = GitService.get_all_files_touched_in_range(self.commit_hashes_in_range)
+        print("Printing raw file names:")
+        for file_name in self.all_files_raw:
+            print(file_name)
     
     def compile_list_of_all_new_files(self):
+        count = 0
         for file in self.all_files_raw:
             if file[0] == 'A':
                 name_only = file[1:].lstrip()
                 file_details = FileDetails(self, name_only, True, False, False)
-                if file_details not in self.new_files:
-                    self.new_files.append(name_only)
+                if file_details.is_ready:
+                    if file_details not in self.new_files:
+                        self.new_files.append(file_details)
+                else:
+                    count = count + 1
+        print(f"Failed FileDetails in self.new_files: {count}")
 
     def compile_list_of_all_removed_files(self):
+        count = 0
         for file in self.all_files_raw:
             if file[0] == 'D':
                 name_only = file[1:].lstrip()
-                if name_only not in self.removed_files:
-                    self.removed_files.append(name_only)
+                file_details = FileDetails(self, name_only, True, False, False)
+                if file_details.is_ready:
+                    if file_details not in self.removed_files:
+                        self.removed_files.append(file_details)
+                else:
+                    count = count + 1
+        print(f"Failed FileDetails in self.removed_files: {count}")
 
     def compile_list_of_all_changed_files(self):
+        count = 0
         for file in self.all_files_raw:
             if file[0] == 'M':
                 name_only = file[1:].lstrip()
-                if name_only not in self.changed_files:
-                    self.changed_files.append(name_only)
+                file_details = FileDetails(self, name_only, True, False, False)
+                if file_details.is_ready:
+                    if file_details not in self.changed_files:
+                        self.changed_files.append(file_details)
+                else:
+                    count = count + 1
+        print(f"Failed FileDetails in self.changed_files: {count}")
 
     def generate_summaries(self):
         for new_file_details in self.new_files:
