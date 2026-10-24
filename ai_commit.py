@@ -49,12 +49,12 @@ class FileDetails:
     git_summary: 'GitSummary' = None #GitSummary
     file_path = ""
     file_name = ""
-    oldest_commit_hash = None #GitHash
-    newest_commit_hash = None #GitHash
+    oldest_commit_hash: GitHash = None #GitHash
+    newest_commit_hash: GitHash = None #GitHash
     oldest_commit_complete_file = ""
     newest_commit_complete_file = ""
     oldest_newest_diff = ""
-    ai_summary = None #AiSummary
+    ai_summary:AiSummary = None #AiSummary
     is_new = False
     is_changed = False
     is_removed = False
@@ -125,13 +125,16 @@ class FileDetails:
                     self.oldest_commit_hash = commit_hash   
 
     def get_oldest_version_of_file(self):
-        self.oldest_commit_complete_file = GitService.get_file_from_commit(self.file_path, self.oldest_commit_hash)
+        if self.oldest_commit_hash:
+            self.oldest_commit_complete_file = GitService.get_file_from_commit(self.file_path, self.oldest_commit_hash)
 
     def get_newest_version_of_file(self):
-        self.newest_commit_complete_file = GitService.get_file_from_commit(self.file_path, self.newest_commit_hash)
+        if self.newest_commit_hash:
+            self.newest_commit_complete_file = GitService.get_file_from_commit(self.file_path, self.newest_commit_hash)
 
     def get_oldest_newest_diff(self):
-        self.oldest_newest_diff = GitService.get_file_diff_between_commits(self.file_path, self.oldest_commit_hash, self.newest_commit_hash)
+        if self.oldest_commit_hash and self.newest_commit_hash:
+            self.oldest_newest_diff = GitService.get_file_diff_between_commits(self.file_path, self.oldest_commit_hash, self.newest_commit_hash)
 
     def get_ai_summary(self):
         if self.is_ready:
@@ -445,7 +448,7 @@ class GitService:
 
     @staticmethod
     def get_file_from_commit(file_path: str, target_commit_hash: GitHash) -> Optional[str]:
-        if target_commit_hash.is_valid:
+        if target_commit_hash and target_commit_hash.is_valid:
             if file_path:
                 try:
                     hash_file_path = target_commit_hash.hash + ":" + file_path  
@@ -461,7 +464,10 @@ class GitService:
             else:
                 raise ValueError(f"file path: ${file_path} is not valid")
         else:
-            raise ValueError(f"Target Commit Hash: ${target_commit_hash.hash} is not valid")
+            if target_commit_hash:
+                raise ValueError(f"Target Commit Hash: ${target_commit_hash.hash} is not valid")
+            else:
+                raise ValueError(f"Target Commit Hash: None is not valid")
 
     @staticmethod
     def get_file_diff_between_commits(file_path: str, commit_hash_1: GitHash, commit_hash_2: GitHash) -> str:
@@ -641,8 +647,8 @@ Generate ONLY the commit message, nothing else:"""
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
 
 Summarize the reason this files has been added based on your analysis of the changes and purpose of this file using the following:
-- `The New Code`: {file_details.newest_commit_complete_file}
-- Summary based on `The New Code`: {file_details.ai_summary.complete_file_changes_summary}
+- `The New Code`: {newest_commit_complete_file}
+- Summary based on `The New Code`: {complete_file_changes_summary}
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -657,11 +663,11 @@ Generate ONLY the summary, nothing else:""",
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the changes and purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
 
 Summarize the changes and purpose of this file using the following:
-- `The Old Code`: {file_details.oldest_commit_complete_file}
-- `The New Code`: {file_details.newest_commit_complete_file}
-- `The Changes`: {file_details.oldest_newest_diff}
-- Summary comparing `The Old Code` and `The New Code`: {file_details.ai_summary.complete_file_changes_summary}
-- Summary based on `The Changes`: {file_details.ai_summary.oldest_newest_diff_summary}
+- `The Old Code`: {oldest_commit_complete_file}
+- `The New Code`: {newest_commit_complete_file}
+- `The Changes`: {oldest_newest_diff}
+- Summary comparing `The Old Code` and `The New Code`: {complete_file_changes_summary}
+- Summary based on `The Changes`: {oldest_newest_diff_summary}
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -676,8 +682,8 @@ Generate ONLY the summary, nothing else:""",
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the reason that this file has been removed by analyzing the following summaries, git diff, and files based on the provided references.
 
 Summarize the reason this file has been removed based on your analysis of the changes and purpose of this file using the following:
-- `The Old Code`: {file_details.oldest_commit_complete_file}
-- Summary based on `The Old Code`: {file_details.ai_summary.complete_file_changes_summary}
+- `The Old Code`: {oldest_commit_complete_file}
+- Summary based on `The Old Code`: {complete_file_changes_summary}
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -692,7 +698,7 @@ Generate ONLY the summary, nothing else:""",
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
 
 Summarize the reason this files has been added based on your analysis of the changes and purpose of this file using the following:
-- `The New Code`: {file_details.newest_commit_complete_file}
+- `The New Code`: {newest_commit_complete_file}
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -707,8 +713,8 @@ Generate ONLY the summary, nothing else:""",
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the changes and purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
 
 Summarize the changes and purpose of this file using the following:
-- `The Old Code`: {file_details.oldest_commit_complete_file}
-- `The New Code`: {file_details.newest_commit_complete_file}
+- `The Old Code`: {oldest_commit_complete_file}
+- `The New Code`: {newest_commit_complete_file}
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -723,7 +729,7 @@ Generate ONLY the summary, nothing else:""",
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the reason that this file has been removed by analyzing the following summaries, git diff, and files based on the provided references.
 
 Summarize the reason this file has been removed based on your analysis of the changes and purpose of this file using the following:
-- `The Old Code`: {file_details.oldest_commit_complete_file}
+- `The Old Code`: {oldest_commit_complete_file}
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -738,7 +744,7 @@ Generate ONLY the summary, nothing else:""",
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the reason and purpose this file has been added by analyzing the following diffs and files based on the provided references.
 
 Summarize the reason this files has been added based on your analysis of the changes and purpose of this file using the following:
-- `The New Diff`: {file_details.oldest_newest_diff}
+- `The New Diff`: {oldest_newest_diff}
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -753,7 +759,7 @@ Generate ONLY the summary, nothing else:""",
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the changes and purpose of this file by analyzing the following summaries, git diff, and files based on the provided references.
 
 Summarize the changes and purpose of this file using the following:
-- `The Changes`: {file_details.oldest_newest_diff}
+- `The Changes`: {oldest_newest_diff}
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -768,7 +774,7 @@ Generate ONLY the summary, nothing else:""",
 """You are a text editor, C Sharp, Unity, and git commit message expert. You are summarizing the reason that this file has been removed by analyzing the following summaries, git diff, and files based on the provided references.
 
 Summarize the reason this file has been removed based on your analysis of the changes and purpose of this file using the following:
-- `The Changes`: {file_details.oldest_newest_diff}
+- `The Changes`: {oldest_newest_diff}
 Concentrate your analysis on these files for the summary.
 
 Contextualize your summary with information from this diff: {diff}. 
@@ -779,22 +785,34 @@ comments are indicated by '//', these provide context but are not always correct
 Generate ONLY the summary, nothing else:""",
         }
 
-        prompt = prompts.get(style, prompts["conventional"]).format(diff=diff)  # Limit diff size
-        
-        tokens = len(prompt.split())
-        print(f"Prompt Length: {len(prompt)}")
-        print(f"Tokens Required: {tokens}")
-        message = self.ollama.generate(prompt, tokens)
-    
-        if message:
-            # Clean up the message
-            message = message.strip()
-            # Remove any markdown code blocks
-            if message.startswith('```'):
-                lines = message.split('\n')
-                message = '\n'.join(lines[1:-1] if len(lines) > 2 else lines)
-            message = message.strip()
-
+        finalmessage = ""
+        for promptkey in prompts.keys():
+            if style in str(promptkey):
+                print(f"Generating {promptkey} prompt")
+                prompt = prompts.get(promptkey, prompts["single_file_general_new"]).format(diff=diff, 
+                                                                                           newest_commit_complete_file = file_details.newest_commit_complete_file,
+                                                                                           complete_file_changes_summary = file_details.ai_summary.complete_file_changes_summary, 
+                                                                                           oldest_commit_complete_file = file_details.oldest_commit_complete_file, 
+                                                                                           oldest_newest_diff = file_details.oldest_newest_diff, 
+                                                                                           oldest_newest_diff_summary = file_details.ai_summary.oldest_newest_diff_summary )  # Limit diff size
+                tokens = len(prompt.split())
+                print(f"Prompt Length: {len(prompt)}")
+                print(f"Tokens Required: {tokens}")
+                message = self.ollama.generate(prompt, tokens)
+                if message:
+                    # Clean up the message
+                    message = message.strip()
+                    # Remove any markdown code blocks
+                    if message.startswith('```'):
+                        lines = message.split('\n\n')
+                        message = '\n'.join(lines[1:-1] if len(lines) > 2 else lines)
+                    message = message.strip()
+                    message = message + "\n\n"
+                    print(f"{message}")
+                    finalmessage = finalmessage + message
+                else:
+                    finalmessage = finalmessage + "No Response\n\n"
+        message = finalmessage
         
         return message
 
@@ -866,40 +884,43 @@ class GitSummary:
     def compile_list_of_all_new_files(self):
         count = 0
         for file in self.all_files_raw:
-            if file[0] == 'A':
-                name_only = file[1:].lstrip()
-                file_details = FileDetails(self, name_only, True, False, False)
-                if file_details.is_ready:
-                    if file_details not in self.new_files:
-                        self.new_files.append(file_details)
-                else:
-                    count = count + 1
+            if file:
+                if file[0] == 'A':
+                    name_only = file[1:].lstrip()
+                    file_details = FileDetails(self, name_only, True, False, False)
+                    if file_details.is_ready:
+                        if file_details not in self.new_files:
+                            self.new_files.append(file_details)
+                    else:
+                        count = count + 1
         print(f"Failed FileDetails in self.new_files: {count}")
 
     def compile_list_of_all_removed_files(self):
         count = 0
         for file in self.all_files_raw:
-            if file[0] == 'D':
-                name_only = file[1:].lstrip()
-                file_details = FileDetails(self, name_only, True, False, False)
-                if file_details.is_ready:
-                    if file_details not in self.removed_files:
-                        self.removed_files.append(file_details)
-                else:
-                    count = count + 1
+            if file:
+                if file[0] == 'D':
+                    name_only = file[1:].lstrip()
+                    file_details = FileDetails(self, name_only, True, False, False)
+                    if file_details.is_ready:
+                        if file_details not in self.removed_files:
+                            self.removed_files.append(file_details)
+                    else:
+                        count = count + 1
         print(f"Failed FileDetails in self.removed_files: {count}")
 
     def compile_list_of_all_changed_files(self):
         count = 0
         for file in self.all_files_raw:
-            if file[0] == 'M':
-                name_only = file[1:].lstrip()
-                file_details = FileDetails(self, name_only, True, False, False)
-                if file_details.is_ready:
-                    if file_details not in self.changed_files:
-                        self.changed_files.append(file_details)
-                else:
-                    count = count + 1
+            if file:
+                if file[0] == 'M':
+                    name_only = file[1:].lstrip()
+                    file_details = FileDetails(self, name_only, True, False, False)
+                    if file_details.is_ready:
+                        if file_details not in self.changed_files:
+                            self.changed_files.append(file_details)
+                    else:
+                        count = count + 1
         print(f"Failed FileDetails in self.changed_files: {count}")
 
     def generate_summaries(self):
