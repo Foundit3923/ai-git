@@ -970,31 +970,49 @@ class GitSummary:
 
     def print_summaries(self):
         print(f"{Colors.GREEN}{Colors.BOLD} New Files List:{Colors.END}")
-        for new_file_details in self.new_files:
-            print(f"- {new_file_details.file_name}")
+        if len(self.removed_files) == 0:
+            print("No New Files")
+        else:
+            for new_file_details in self.new_files:
+                print(f"- {new_file_details.file_name}")
 
         print(f"\n{Colors.GREEN}{Colors.BOLD} Changed Files List:{Colors.END}")
-        for changed_file_details in self.changed_files:
-            print(f"- {changed_file_details.file_name}")
+        if len(self.removed_files) == 0:
+            print("No Changed Files")
+        else:
+            for changed_file_details in self.changed_files:
+                print(f"- {changed_file_details.file_name}")
 
         print(f"\n{Colors.GREEN}{Colors.BOLD} Removed Files List:{Colors.END}")
-        for removed_file_details in self.removed_files:
-            print(f"- {removed_file_details.file_name}")
+        if len(self.removed_files) == 0:
+            print("No Removed Files")
+        else:
+            for removed_file_details in self.removed_files:
+                print(f"- {removed_file_details.file_name}")
 
         print(f"\n\n{Colors.GREEN}{Colors.BOLD} New Files:{Colors.END}\n")
         print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
-        for new_file_details in self.new_files:
-            new_file_details.print_summary()
+        if len(self.removed_files) == 0:
+            print("No New Files")
+        else:
+            for new_file_details in self.new_files:
+                new_file_details.print_summary()
 
         print(f"\n\n{Colors.GREEN}{Colors.BOLD} Changed Files:{Colors.END}\n")
         print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
-        for changed_file_details in self.changed_files:
-            changed_file_details.print_summary()
+        if len(self.removed_files) == 0:
+            print("No Changed Files")
+        else:
+            for changed_file_details in self.changed_files:
+                changed_file_details.print_summary()
 
         print(f"\n\n{Colors.GREEN}{Colors.BOLD} Removed Files:{Colors.END}\n")
         print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
-        for removed_file_details in self.removed_files:
-            removed_file_details.print_summary()
+        if len(self.removed_files) == 0:
+            print("No Removed Files")
+        else:
+            for removed_file_details in self.removed_files:
+                removed_file_details.print_summary()
 
 def print_banner():
     """Print application banner"""
