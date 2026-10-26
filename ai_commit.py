@@ -7,11 +7,10 @@ GitHub: https://github.com/himanshu231204/ai-commit
 Email: himanshu231204@gmail.com
 """
 
-import json
 import subprocess
 import sys
 import argparse
-from typing import Optional
+from typing import Any, Optional
 import requests
 
 
@@ -28,11 +27,11 @@ class Colors:
     END = '\033[0m'
 
 class AiSummary:
-    general_summary = ""
+    general_summary: Optional[str] = None
     general_summary_type = "single_file_general"
-    complete_file_changes_summary = ""
+    complete_file_changes_summary: Optional[str] = None
     complete_file_changes_summary_type = "single_file_complete_file_changes"
-    oldest_newest_diff_summary = ""
+    oldest_newest_diff_summary: Optional[str] = None
     oldest_newest_diff_summary_type = "single_file_oldest_newest_diff"
 
 class GitHash:
@@ -46,15 +45,15 @@ class GitHash:
                 self.is_valid = True
 
 class FileDetails:
-    git_summary: 'GitSummary' = None #GitSummary
+    git_summary: 'GitSummary'
     file_path = ""
     file_name = ""
-    oldest_commit_hash: GitHash = None #GitHash
-    newest_commit_hash: GitHash = None #GitHash
+    oldest_commit_hash: GitHash
+    newest_commit_hash: GitHash
     oldest_commit_complete_file = ""
     newest_commit_complete_file = ""
     oldest_newest_diff = ""
-    ai_summary:AiSummary = None #AiSummary
+    ai_summary: AiSummary
     is_new = False
     is_changed = False
     is_removed = False
@@ -105,15 +104,15 @@ class FileDetails:
     def __hash__(self):
         return hash(self.__key)
 
-    def __eq__(self, other):
-        if isinstance(other,FileDetails):
+    def __eq__(self, other: Any):
+        if isinstance(other, FileDetails):
             return self.__key() == other.__key()
         return NotImplemented   
 
     def get_oldest_commit_hash(self):
         for commit_hash in self.git_summary.commit_hashes_in_range[::-1]:
             files_touched_by_commit = GitService.get_all_files_touched_in_commit(commit_hash)
-            for file_data in files_touched_by_commit.split("\n\n")[-1].split("\n"):
+            for file_data in files_touched_by_commit:
                 if self.file_path in file_data:
                     self.oldest_commit_hash = commit_hash   
                     #print(f"Oldest commit hash for {self.file_name}: {self.oldest_commit_hash}")
@@ -121,7 +120,7 @@ class FileDetails:
     def get_newest_commit_hash(self):
         for commit_hash in self.git_summary.commit_hashes_in_range:
             files_touched_by_commit = GitService.get_all_files_touched_in_commit(commit_hash)
-            for file_data in files_touched_by_commit.split("\n\n")[-1].split("\n"):
+            for file_data in files_touched_by_commit:
                 if self.file_path in file_data:
                     self.newest_commit_hash = commit_hash   
                     #print(f"Newest commit hash for {self.file_name}: {self.newest_commit_hash}")
@@ -140,10 +139,10 @@ class FileDetails:
                 self.oldest_newest_diff = GitService.get_file_diff_between_commits(self.file_path, self.oldest_commit_hash, self.newest_commit_hash)
 
     def get_ai_summary(self):
-        if self.is_ready:
-            self.ai_summary.complete_file_changes_summary = self.git_summary.generator.generate_single_file_message(self.git_summary.diff, self, self.ai_summary.complete_file_changes_summary_type)
-            self.ai_summary.oldest_newest_diff_summary = self.git_summary.generator.generate_single_file_message(self.git_summary.diff, self, self.ai_summary.oldest_newest_diff_summary_type)
-            self.ai_summary.general_summary = self.git_summary.generator.generate_single_file_message(self.git_summary.diff, self, self.ai_summary.general_summary_type)
+        if self.is_ready and (generator := self.git_summary.generator):
+            self.ai_summary.complete_file_changes_summary = generator.generate_single_file_message(self.git_summary.diff, self, self.ai_summary.complete_file_changes_summary_type)
+            self.ai_summary.oldest_newest_diff_summary = generator.generate_single_file_message(self.git_summary.diff, self, self.ai_summary.oldest_newest_diff_summary_type)
+            self.ai_summary.general_summary = generator.generate_single_file_message(self.git_summary.diff, self, self.ai_summary.general_summary_type)
 
     def print_summary(self):
         print(f"{Colors.GREEN}{Colors.BOLD} {self.file_name} Summary:{Colors.END}")
@@ -159,7 +158,7 @@ class FileDetails:
 class OllamaClient:
     """Client for interacting with Ollama API"""
     
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = None):
+    def __init__(self, base_url: str = "http://localhost:11434", model: Optional[str] = None):
         self.base_url = base_url.rstrip('/')
         self.model = model  # Will be auto-selected if None
     
@@ -171,13 +170,13 @@ class OllamaClient:
         except requests.exceptions.RequestException:
             return False
     
-    def list_models(self) -> list:
+    def list_models(self) -> list[str]:
         """List available models"""
         try:
             response = requests.get(f"{self.base_url}/api/tags", timeout=5)
             if response.status_code == 200:
                 data = response.json()
-                return [model['name'] for model in data.get('models', [])]
+                return [str(model['name']) for model in data.get('models', [])]
             return []
         except requests.exceptions.RequestException:
             return []
@@ -264,6 +263,7 @@ class OllamaClient:
                 },
                 timeout=120  # Increased to 2 minutes for larger models
             )
+            response.raise_for_status()
         except requests.exceptions.Timeout:
             print(f"{Colors.RED}Request timed out. Model '{self.model}' might be too large.{Colors.END}")
             print(f"{Colors.YELLOW}Try using a lighter model like 'phi' or 'mistral'{Colors.END}")
@@ -322,7 +322,7 @@ class GitService:
     def stage_all_changes() -> bool:
         """Stage all existing changes"""
         try:
-            result = subprocess.run(
+            subprocess.run(
                 ['git', 'add', '.'],
                 check=True
             )
@@ -333,6 +333,7 @@ class GitService:
     @staticmethod
     def has_staged_changes() -> bool:
         """Check if there are staged changes"""
+        return False  #  TODO: This was previously unimplemented and creating a type error. Implement a proper check
     
     @staticmethod
     def validate_hash(hash: str) -> bool:
@@ -390,7 +391,7 @@ class GitService:
             return False
 
     @staticmethod
-    def get_list_of_ancestry_path(old_commit_hash: GitHash, new_commit_hash: GitHash) -> Optional[list]:
+    def get_list_of_ancestry_path(old_commit_hash: GitHash, new_commit_hash: GitHash) -> list[GitHash]:
         if old_commit_hash.is_valid:
             if new_commit_hash.is_valid:
                 if (GitService.is_ancestor(old_commit_hash, new_commit_hash)):
@@ -402,7 +403,7 @@ class GitService:
                             check=True
                         ) 
                         print("ancestry list subprocess completed")
-                        ancestry_path = []
+                        ancestry_path: list[GitHash] = []
                         for hash in result.stdout.split('\n'):
                             git_hash = GitHash(hash)
                             if git_hash.is_valid:
@@ -440,14 +441,14 @@ class GitService:
         return False
 
     @staticmethod
-    def get_all_files_touched_in_range(commit_range_list: list[GitHash]) -> Optional[list]:
-        list_of_unique_files = []
+    def get_all_files_touched_in_range(commit_range_list: list[GitHash]) -> list[str]:
+        list_of_unique_files: list[str] = []
         if commit_range_list:
             for commit_hash in commit_range_list:
                 if commit_hash.is_valid:
                     files_touched_in_commit = GitService.get_all_files_touched_in_commit(commit_hash)
                     #print(f"Files touched in commit: \n{files_touched_in_commit}")
-                    for file_name_status in files_touched_in_commit.split("\n\n")[-1].split("\n"):
+                    for file_name_status in files_touched_in_commit:
                         if ".meta" not in file_name_status:
                             if ".json" not in file_name_status:
                                 if ".png" not in file_name_status:
@@ -460,7 +461,7 @@ class GitService:
         return list_of_unique_files
 
     @staticmethod
-    def get_all_files_touched_in_commit(target_commit_hash: GitHash) -> Optional[list]:
+    def get_all_files_touched_in_commit(target_commit_hash: GitHash) -> list[str]:
         if target_commit_hash.is_valid:
             try:
                 result = subprocess.run(
@@ -469,9 +470,10 @@ class GitService:
                     text=True,
                     check=True
                 ) 
-                return result.stdout
+                sections = result.stdout.split("\n\n")
+                return sections[-1].split("\n") if sections else []
             except subprocess.CalledProcessError:
-                return None
+                return []
         else:
             raise ValueError(f"Target Commit Hash: ${target_commit_hash.hash} is not valid")
 
@@ -499,7 +501,7 @@ class GitService:
                 raise ValueError(f"Target Commit Hash: None is not valid")
 
     @staticmethod
-    def get_file_diff_between_commits(file_path: str, commit_hash_1: GitHash, commit_hash_2: GitHash) -> str:
+    def get_file_diff_between_commits(file_path: str, commit_hash_1: GitHash, commit_hash_2: GitHash) -> Optional[str]:
         if commit_hash_1.is_valid:
             if commit_hash_2.is_valid:
                 if file_path:
@@ -843,10 +845,10 @@ Generate ONLY the summary, nothing else:"""
 class GitSummary:
     generator = None #CommitGenerator(ollama)
     diff = ""
-    commit_hash_range_oldest: GitHash = None #GitHash
-    commit_hash_range_newest: GitHash = None #GitHash
+    commit_hash_range_oldest: GitHash
+    commit_hash_range_newest: GitHash
     commit_hashes_in_range: list[GitHash] = [] #GitHash[]
-    all_files_raw = [] #str
+    all_files_raw: list[str] = []
     new_files: list[FileDetails] = [] #FileDetails[]
     changed_files: list[FileDetails] = [] #FileDetails[]
     removed_files: list[FileDetails] = [] #FileDetails[]
@@ -858,17 +860,13 @@ class GitSummary:
         staged_check = False
         git_hash_1 = GitHash(_commit_hash_1)
         if git_hash_1.is_valid:
-            self.commit_hash_range_oldest = git_hash_1 
-        elif _commit_hash_1 is None:
-            raise ValueError(f"Commit hash 1: ${_commit_hash_1} is not valid")
+            self.commit_hash_range_oldest = git_hash_1
         else:
             staged_check = True
 
         git_hash_2 = GitHash(_commit_hash_2)
         if git_hash_2.is_valid:
             self.commit_hash_range_newest = git_hash_2
-        elif _commit_hash_2 is None:
-            raise ValueError(f"Commit hash 2: ${_commit_hash_2} is not valid")
         else:
             if staged_check:
                 if GitService.has_staged_changes():
@@ -1105,9 +1103,9 @@ def main():
 
     if args.range is not None:
         print("summarize a range of commits")
-        oldest_commit_hash = args.range[0]
-        newest_commit_hash = args.range[1]
-        diff = GitService.retrieve_range_commit_diff(args.range[0], args.range[1])
+        oldest_commit_hash = str(args.range[0])
+        newest_commit_hash = str(args.range[1])
+        diff = GitService.retrieve_range_commit_diff(oldest_commit_hash, newest_commit_hash)
         if styleOverride is False:
             style = "detailed"
         if args.model is None:
@@ -1125,9 +1123,9 @@ def main():
 
     elif args.commit is not None:
         print(f"summarize the commit {args.commit}")
-        oldest_commit_hash = args.range[0]
-        newest_commit_hash = args.range[0]
-        diff = GitService.retrieve_commit(args.commit[0])
+        oldest_commit_hash = str(args.commit[0])
+        newest_commit_hash = str(args.commit[0])
+        diff = GitService.retrieve_commit(oldest_commit_hash)
         if styleOverride is False:
             style = "detailed"
         if args.model is None:
@@ -1248,7 +1246,7 @@ def main():
     print(f"{Colors.CYAN}🤖 Generating {style} commit message...{Colors.END}\n")
     
     while True:
-        git_summary = None
+        git_summary: Optional[GitSummary] = None
         if oldest_commit_hash and newest_commit_hash:
             print(f"{Colors.CYAN}🤖 Building {style} git summary...{Colors.END}\n")
             git_summary = GitSummary(oldest_commit_hash, newest_commit_hash, generator, diff)
@@ -1269,7 +1267,8 @@ def main():
         print(f"{Colors.BOLD}{commit_message}{Colors.END}")
         print(f"{Colors.CYAN}{'─' * 50}{Colors.END}\n")
 
-        git_summary.print_summaries()
+        if git_summary:
+            git_summary.print_summaries()
         
         # Ask user what to do
         print(f"{Colors.YELLOW}Options:{Colors.END}")
@@ -1301,8 +1300,8 @@ def main():
         elif choice == 'e':
             # Edit message
             print(f"\n{Colors.CYAN}✏️  Enter your commit message (press Ctrl+D when done):{Colors.END}")
+            lines: list[str] = []
             try:
-                lines = []
                 while True:
                     line = input()
                     lines.append(line)
